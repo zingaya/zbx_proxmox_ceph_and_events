@@ -1,0 +1,167 @@
+zabbix_export:
+  version: '7.2'
+  template_groups:
+    - uuid: 26f42bba0c4448c290fa5423bb4a2664
+      name: 'Custom Templates'
+  templates:
+    - uuid: 8c22bf0b3f87485191584ddbf1dfe903
+      template: 'Proxmox VE by HTTP with backup and notifications'
+      name: 'Proxmox VE by HTTP with backup and notifications'
+      templates:
+        - name: 'Proxmox VE by HTTP'
+      groups:
+        - name: 'Custom Templates'
+      items:
+        - uuid: b18ff873ea494f5f8db4652b263ac3e7
+          name: 'Trapper cluster notifications'
+          type: TRAP
+          key: proxmox.cluster.notifications
+          history: 2w
+          value_type: TEXT
+          tags:
+            - tag: component
+              value: raw
+          triggers:
+            - uuid: 7d45c7e72adc42d588b543ef9d5fc51d
+              expression: |
+                jsonpath(last(/Proxmox VE by HTTP with backup and notifications/proxmox.cluster.notifications),"$[0].node","")<>""
+                and
+                jsonpath(last(/Proxmox VE by HTTP with backup and notifications/proxmox.cluster.notifications),"$[0].event","")="vzdump"
+                and
+                jsonpath(last(/Proxmox VE by HTTP with backup and notifications/proxmox.cluster.notifications),"$[0].severity","info")<>"info"
+              recovery_mode: NONE
+              name: 'Node {{ITEM.LASTVALUE1}.regsub("\"node\": \"(.*)\",","\1")}: backup failed ({{ITEM.LASTVALUE1}.regsub("Name%3A%20([a-zA-Z0-9_-]+)%0A([0-9]+)%","Id: \2 Name: \1")})'
+              priority: AVERAGE
+              type: MULTIPLE
+              manual_close: 'YES'
+              tags:
+                - tag: scope
+                  value: backup
+        - uuid: 633cd17dcbcb4b71bc91995ea97eb999
+          name: 'Get cluster tasks'
+          type: HTTP_AGENT
+          key: proxmox.cluster.tasks
+          delay: 5m
+          history: '0'
+          value_type: TEXT
+          description: 'Get cluster tasks information. Probably unsorted'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  try {
+                    var jsonData = JSON.parse(value);
+                  
+                  // Separate data into two arrays: one with endtime and one without
+                  var withEndtime = [];
+                  var withoutEndtime = [];
+                  
+                  jsonData.data.forEach(function(item) {
+                      if (item.hasOwnProperty('endtime')) {
+                          withEndtime.push(item);
+                      } else {
+                          withoutEndtime.push(item);
+                      }
+                  });
+                  
+                  // Sort withEndtime in descending order by endtime
+                  withEndtime.sort(function(a, b) {
+                      return b.endtime - a.endtime;
+                  });
+                  
+                  // Sort withoutEndtime in ascending order by starttime
+                  withoutEndtime.sort(function(a, b) {
+                      return a.starttime - b.starttime;
+                  });
+                  
+                  // Combine the two sorted arrays
+                  jsonData.data = withEndtime.concat(withoutEndtime);
+                  
+                    return JSON.stringify(jsonData);
+                  } catch (error) {
+                    return error;
+                  }
+          timeout: 3s
+          url: 'https://{$PVE.URL.HOST}:{$PVE.URL.PORT}/api2/json/cluster/tasks'
+          headers:
+            - name: Authorization
+              value: 'PVEAPIToken={$PVE.TOKEN.ID}={$PVE.TOKEN.SECRET}'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: b5f71b49075b490d9e464069db097572
+          name: 'Cluster backup log'
+          type: DEPENDENT
+          key: 'proxmox.cluster.tasks[backup log]'
+          history: 2w
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.[?(@.event == "vzdump")].message.first()'
+              error_handler: DISCARD_VALUE
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var decoded = decodeURIComponent(value);
+                  return decoded;
+          master_item:
+            key: proxmox.cluster.notifications
+          tags:
+            - tag: component
+              value: vzdump-log
+            - tag: node
+              value: any
+        - uuid: dd0c19d7341f4154b487c4e6aa703ff4
+          name: 'Cluster notifications log'
+          type: DEPENDENT
+          key: 'proxmox.cluster.tasks[notifications log]'
+          history: 2w
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.[?(@.event != "vzdump")].message.first()'
+              error_handler: DISCARD_VALUE
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var decoded = decodeURIComponent(value);
+                  return decoded;
+          master_item:
+            key: proxmox.cluster.notifications
+          tags:
+            - tag: component
+              value: cluster-log
+            - tag: node
+              value: any
+        - uuid: e4dab75c2b6a423186e5e201aeb83746
+          name: 'Running vzdump (time running)'
+          type: DEPENDENT
+          key: 'proxmox.cluster.tasks[vzdump time running]'
+          history: 2w
+          trends: 60d
+          units: s
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.data[?(@.type=="vzdump" && !@.endtime)].starttime.first()'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  if (value > 0) {
+                    var unixTime = value;
+                    var currentTime = new Date();
+                    return Math.trunc(currentTime / 1000) - unixTime;
+                  } else { return 0 };
+                  
+            - type: DISCARD_UNCHANGED
+          master_item:
+            key: proxmox.cluster.tasks
+          tags:
+            - tag: component
+              value: vzdump-timerunning
+            - tag: node
+              value: any

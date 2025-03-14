@@ -1,0 +1,612 @@
+zabbix_export:
+  version: '7.2'
+  template_groups:
+    - uuid: 26f42bba0c4448c290fa5423bb4a2664
+      name: 'Custom Templates'
+  templates:
+    - uuid: f64a2f9bd7ca49ff838f27b1c1726f60
+      template: 'Proxmox VE by HTTP - CEPH'
+      name: 'Proxmox VE by HTTP - CEPH'
+      description: |
+        This template serves as additional to the official Zabbix template for Proxmox.
+        
+        It adds additional data regarding CEPH status on Proxmox VE by calling the same API and use the same macros as the official template.
+      groups:
+        - name: 'Custom Templates'
+      items:
+        - uuid: dfe766b11aa64402b3366b00473b291b
+          name: 'Misplaced recovery timeleft'
+          type: CALCULATED
+          key: proxmox.cluster.ceph.recovery.misplaced_objects
+          units: s
+          params: |
+            (last(//proxmox.cluster.ceph.status.misplaced_objects)<last(//proxmox.cluster.ceph.status.misplaced_objects,#60))*timeleft(//proxmox.cluster.ceph.status.misplaced_objects,1h,0)
+            +
+            (last(//proxmox.cluster.ceph.status.misplaced_objects)>=last(//proxmox.cluster.ceph.status.misplaced_objects,#60))*timeleft(//proxmox.cluster.ceph.status.misplaced_objects,10m,0)
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - 'return (value != NaN && value < 100000000) ? Math.ceil(value) : 0;'
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 254df8d8c0bc40c2bd47057d20cf3513
+          name: 'Get cluster CEPH status'
+          type: HTTP_AGENT
+          key: proxmox.cluster.ceph.status
+          history: '0'
+          value_type: TEXT
+          description: 'Get cluster ceph status information.'
+          preprocessing:
+            - type: CHECK_NOT_SUPPORTED
+              parameters:
+                - '-1'
+              error_handler: CUSTOM_VALUE
+              error_handler_params: 'Error getting data'
+          timeout: 3s
+          url: 'https://{$PVE.URL.HOST}:{$PVE.URL.PORT}/api2/json/cluster/ceph/status'
+          headers:
+            - name: Authorization
+              value: 'PVEAPIToken={$PVE.TOKEN.ID}={$PVE.TOKEN.SECRET}'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: cf69208ad9364ee6be582811d8ca46f7
+          name: 'Bytes available'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.bytes_avail
+          history: 2w
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.bytes_avail.first()
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 95bdd0a1fea04be4a1dd91e252cc4304
+          name: 'Bytes total'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.bytes_total
+          history: 2w
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.bytes_total.first()
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: c3c727c3ea31460080d03ad68ac91d06
+          name: 'Bytes used'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.bytes_used
+          history: 2w
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.bytes_used.first()
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 560c49464ca0411b955c4a5e7d43e6de
+          name: Health
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.health
+          history: 2w
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.data.health.status
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 7d
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 6d555f97d68e4695a615d201e97b30b9
+          name: 'Health message'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.message
+          history: 2w
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..summary.message.first()
+              error_handler: CUSTOM_VALUE
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 7d
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 35266e83f8b344a59cfb1ddc12ca0aa8
+          name: 'Misplaced objects'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.misplaced_objects
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.misplaced_objects.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 35276d90da664b0d91a9a07ca29927bb
+          name: 'Misplaced ratio'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.misplaced_ratio
+          history: 2w
+          value_type: FLOAT
+          units: '%'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.misplaced_ratio.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: MULTIPLIER
+              parameters:
+                - '100'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 1bbe2882587a4d5eb9f24aab6bd0de73
+          name: 'Misplaced total'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.misplaced_total
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.misplaced_total.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 1ce05646cffa4896ac2a570f523725b9
+          name: 'Number of objects'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.num_objects
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.num_objects.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 9713e0ad0dd84a2a898979e5d575e08f
+          name: 'Number of objects (change)'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.num_objects.change
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.num_objects.first()
+            - type: SIMPLE_CHANGE
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: f37c47e898164a8ba1e8c658722c8ad7
+          name: 'Bytes read per sec'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.read_bytes_sec
+          history: 2w
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.read_bytes_sec.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 9ea767db0d324bd190ba6af657dfaef1
+          name: 'Read operations per sec'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.read_op_per_sec
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.read_op_per_sec.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: bba5c83a3b034dc88c28bc1896e2a317
+          name: 'Bytes recovery per sec'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.recovering_bytes_per_sec
+          history: 2w
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.recovering_bytes_per_sec.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+          triggers:
+            - uuid: 59463876cbe44251a30ab1b977897278
+              expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.recovering_bytes_per_sec)>0'
+              name: 'CEPH is recovering'
+              priority: INFO
+              tags:
+                - tag: scope
+                  value: storage
+        - uuid: e0d2a547156841758d1136ff7fbdbf10
+          name: 'Objects recovery per sec'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.recovering_objects_per_sec
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.recovering_objects_per_sec.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 7a4fbeafb33143c0b668b2e4e9e406cd
+          name: 'Bytes write per sec'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.write_bytes_sec
+          history: 2w
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.write_bytes_sec.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 4863bb2926df4c2cb52cf33ddf9ed9d1
+          name: 'Write operations per sec'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.write_op_per_sec
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.write_op_per_sec.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 0f882678d1d74005bb9f24d5d656d841
+          name: 'Get cluster OSD statistics'
+          type: SCRIPT
+          key: proxmox.cluster.osd.statistics
+          history: 1h
+          value_type: TEXT
+          params: |
+            params = JSON.parse(value);
+            req = new HttpRequest();
+            
+            // Adding headers for the request
+            req.addHeader('Content-Type: application/json');
+            req.addHeader('Authorization: PVEAPIToken=' + params.id + '=' + params.secret);
+            
+            // Fetch nodes
+            resp = req.get('https://' + params.host + ':' + params.port + '/api2/json/nodes');
+            nodes = JSON.parse(resp);
+            
+            // Function to fetch OSD data for a specific node and return the result
+            function fetchOsdData(node) {
+                try {
+                    osds_all = req.get('https://' + params.host + ':' + params.port + '/api2/json/nodes/' + node + '/ceph/osd');
+                    return osds_all; // Return the OSD data if successful
+                } catch (error) {
+                    return null; // Return null if the request fails
+                }
+            }
+            
+            // Initialize variables
+            var osdData = null;
+            var i = 0;
+            
+            // Loop to try fetching OSD data from nodes, retrying if necessary
+            while (osdData === null && i < nodes.data.length) {
+                osdData = fetchOsdData(nodes.data[i].node);  // Try fetching data from the current node
+                i++;  // Move to the next node if the current one fails
+            }
+            
+            // Return the final OSD data (or null if all nodes failed)
+            return osdData;
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.data.root.children[*].children[*].children[*]'
+          timeout: 10s
+          parameters:
+            - name: host
+              value: '{$PVE.URL.HOST}'
+            - name: id
+              value: '{$PVE.TOKEN.ID}'
+            - name: port
+              value: '{$PVE.URL.PORT}'
+            - name: secret
+              value: '{$PVE.TOKEN.SECRET}'
+          tags:
+            - tag: component
+              value: raw
+      discovery_rules:
+        - uuid: fddbc7147bd9420fb42be6b6779bae18
+          name: 'OSD discovery'
+          type: DEPENDENT
+          key: proxmox.osd.discovery
+          item_prototypes:
+            - uuid: 8c3df903f5bc478e9b3310ac6b2a74ee
+              name: 'OSD {#NODE}/OSD.{#OSD} apply_latency_ms'
+              type: DEPENDENT
+              key: 'proxmox.osd.applylatency[{#OSD}]'
+              history: 1w
+              units: ms
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.id=="{#OSD}")].apply_latency_ms.first()'
+              master_item:
+                key: proxmox.cluster.osd.statistics
+            - uuid: bfb55491a21c49818717294e4f110630
+              name: 'OSD {#NODE}/OSD.{#OSD} commit_latency_ms'
+              type: DEPENDENT
+              key: 'proxmox.osd.commitlatency[{#OSD}]'
+              history: 1w
+              units: ms
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.[?(@.id=="{#OSD}")].commit_latency_ms.first()'
+              master_item:
+                key: proxmox.cluster.osd.statistics
+          master_item:
+            key: proxmox.cluster.osd.statistics
+          lld_macro_paths:
+            - lld_macro: '{#NODE}'
+              path: $.host
+            - lld_macro: '{#OSD}'
+              path: $.id
+      macros:
+        - macro: '{$CEPH.OPERATIONS.WARN}'
+          value: '5000'
+          description: 'How many operations per sec to trigger an alert.'
+  triggers:
+    - uuid: 0dee9c4f58094ff5bb3898051f84a918
+      expression: |
+        last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)<>"HEALTH_OK"
+        and
+        find(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message,#1,"like","pools have too many placement groups")=1
+      name: 'CEPH a pool have too many placement groups'
+      event_name: 'CEPH {ITEM.LASTVALUE2}'
+      opdata: 'Message: {ITEM.LASTVALUE2}'
+      priority: WARNING
+      dependencies:
+        - name: 'CEPH health is in a critical state'
+          expression: |
+            last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_CRIT"
+            and
+            length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+          recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+        - name: 'CEPH health is in a warning state'
+          expression: |
+            last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_WARN"
+            and
+            length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+          recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+      tags:
+        - tag: scope
+          value: storage
+    - uuid: 9225f1b377c7416da8b5a16f450473ab
+      expression: |
+        last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_CRIT"
+        and
+        length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+      recovery_mode: RECOVERY_EXPRESSION
+      recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+      name: 'CEPH health is in a critical state'
+      opdata: 'Message: {ITEM.LASTVALUE2}'
+      priority: HIGH
+      tags:
+        - tag: scope
+          value: storage
+    - uuid: 113f57c08eff44e3b9127319d3984762
+      expression: |
+        last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)<>"HEALTH_OK"
+        and
+        length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+      recovery_mode: RECOVERY_EXPRESSION
+      recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+      name: 'CEPH health is in a unkown state'
+      opdata: 'Message: {ITEM.LASTVALUE2}'
+      priority: WARNING
+      dependencies:
+        - name: 'CEPH health is in a critical state'
+          expression: |
+            last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_CRIT"
+            and
+            length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+          recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+        - name: 'CEPH health is in a warning state'
+          expression: |
+            last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_WARN"
+            and
+            length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+          recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+      tags:
+        - tag: scope
+          value: storage
+    - uuid: 84df8bdde02e4728bcb9e0dd98a7294e
+      expression: |
+        last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_WARN"
+        and
+        length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+      recovery_mode: RECOVERY_EXPRESSION
+      recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+      name: 'CEPH health is in a warning state'
+      opdata: 'Message: {ITEM.LASTVALUE2}'
+      priority: AVERAGE
+      dependencies:
+        - name: 'CEPH health is in a critical state'
+          expression: |
+            last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_CRIT"
+            and
+            length(last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.message))>0
+          recovery_expression: 'last(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.health)="HEALTH_OK"'
+      tags:
+        - tag: scope
+          value: storage
+    - uuid: 94b37e7357884abbbade6e8637603855
+      expression: |
+        avg(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.read_op_per_sec,5m)>={$CEPH.OPERATIONS.WARN}
+        or 
+        avg(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.write_op_per_sec,5m)>={$CEPH.OPERATIONS.WARN}
+      recovery_mode: RECOVERY_EXPRESSION
+      recovery_expression: |
+        max(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.read_op_per_sec,5m)<{$CEPH.OPERATIONS.WARN}
+        or 
+        max(/Proxmox VE by HTTP - CEPH/proxmox.cluster.ceph.status.write_op_per_sec,5m)<{$CEPH.OPERATIONS.WARN}
+      name: 'CEPH read/writes operations per sec is too high'
+      event_name: 'CEPH read/writes operations per sec is too high (over {$CEPH.OPERATIONS.WARN} for 5m)'
+      opdata: 'Read: {ITEM.LASTVALUE1} - Write: {ITEM.LASTVALUE2}'
+      priority: HIGH
+      tags:
+        - tag: scope
+          value: performance
+        - tag: scope
+          value: storage
+  graphs:
+    - uuid: 0cf13b6a842748509054aec77b161268
+      name: 'CEPH bytes per sec'
+      graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.read_bytes_sec
+        - sortorder: '1'
+          color: F63100
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.write_bytes_sec
+    - uuid: 3cbbff27f1c9404ca91dea82d34ba15d
+      name: 'CEPH objects'
+      graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.num_objects
+        - sortorder: '1'
+          drawtype: FILLED_REGION
+          color: FFCA28
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.misplaced_objects
+        - sortorder: '2'
+          drawtype: DASHED_LINE
+          color: 1E88E5
+          yaxisside: RIGHT
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.num_objects.change
+    - uuid: d3c8b6ea12b541c89762aa91a9e238bd
+      name: 'CEPH operations per sec'
+      graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.read_op_per_sec
+        - sortorder: '1'
+          color: F63100
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.write_op_per_sec
+    - uuid: 311c8a866f3f4ccdbd6dd144ceea5b92
+      name: 'CEPH raw capacity'
+      yaxismax: '0'
+      show_work_period: 'NO'
+      show_triggers: 'NO'
+      type: PIE
+      graph_items:
+        - color: 199C0D
+          calc_fnc: LAST
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.bytes_avail
+        - sortorder: '1'
+          color: F63100
+          calc_fnc: LAST
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.bytes_used
+    - uuid: a1d2f9dd52e84d69a46b20d8cd7ee27b
+      name: 'CEPH recovery'
+      graph_items:
+        - color: 199C0D
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.recovering_bytes_per_sec
+        - sortorder: '1'
+          color: FFA726
+          yaxisside: RIGHT
+          calc_fnc: ALL
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.recovering_objects_per_sec
