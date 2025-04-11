@@ -4,6 +4,9 @@
 It adds additional data regarding CEPH status on Proxmox VE by calling the same API and use the same macros as the official template.
 Just add the template on the host or as linked to the official Proxmox template.
 
+Here is an example of a dashboard:
+![image](https://github.com/user-attachments/assets/81ee28d8-b58b-4626-8fd6-d1d207a472a0)
+
 Tested in:\
 Proxmox 7.0 and 8.0\
 Zabbix 7.0
