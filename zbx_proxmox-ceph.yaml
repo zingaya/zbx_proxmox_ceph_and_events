@@ -14,15 +14,25 @@ zabbix_export:
       groups:
         - name: 'Custom Templates'
       items:
+        - uuid: 63f4cea1b1444595b90f16cd77952727
+          name: 'Degraded recovery timeleft'
+          type: CALCULATED
+          key: proxmox.cluster.ceph.recovery.degraded_objects
+          units: s
+          params: 'timeleft(//proxmox.cluster.ceph.status.degraded_objects,10m,0)'
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - 'return (value != NaN && value < 100000000) ? Math.ceil(value) : 0;'
+          tags:
+            - tag: component
+              value: ceph
         - uuid: dfe766b11aa64402b3366b00473b291b
           name: 'Misplaced recovery timeleft'
           type: CALCULATED
           key: proxmox.cluster.ceph.recovery.misplaced_objects
           units: s
-          params: |
-            (last(//proxmox.cluster.ceph.status.misplaced_objects)<last(//proxmox.cluster.ceph.status.misplaced_objects,#60))*timeleft(//proxmox.cluster.ceph.status.misplaced_objects,1h,0)
-            +
-            (last(//proxmox.cluster.ceph.status.misplaced_objects)>=last(//proxmox.cluster.ceph.status.misplaced_objects,#60))*timeleft(//proxmox.cluster.ceph.status.misplaced_objects,10m,0)
+          params: 'timeleft(//proxmox.cluster.ceph.status.misplaced_objects,10m,0)'
           preprocessing:
             - type: JAVASCRIPT
               parameters:
@@ -91,6 +101,43 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $..pgmap.bytes_used.first()
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: 245d361087a1474a8a1bf999dd18dd5f
+          name: 'Degraded objects'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.degraded_objects
+          history: 2w
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.degraded_objects.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: proxmox.cluster.ceph.status
+          tags:
+            - tag: component
+              value: ceph
+        - uuid: f2a7c13441ed40d0843140e47b0bc1a0
+          name: 'Degraded ratio'
+          type: DEPENDENT
+          key: proxmox.cluster.ceph.status.degraded_ratio
+          history: 2w
+          value_type: FLOAT
+          units: '%'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $..pgmap.degraded_ratio.first()
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+            - type: MULTIPLIER
+              parameters:
+                - '100'
           master_item:
             key: proxmox.cluster.ceph.status
           tags:
@@ -195,8 +242,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $..pgmap.num_objects.first()
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: proxmox.cluster.ceph.status
           tags:
@@ -545,18 +591,24 @@ zabbix_export:
       name: 'CEPH objects'
       graph_items:
         - color: 199C0D
-          calc_fnc: ALL
           item:
             host: 'Proxmox VE by HTTP - CEPH'
             key: proxmox.cluster.ceph.status.num_objects
         - sortorder: '1'
-          drawtype: FILLED_REGION
+          drawtype: DASHED_LINE
+          color: FB8C00
+          calc_fnc: MAX
+          item:
+            host: 'Proxmox VE by HTTP - CEPH'
+            key: proxmox.cluster.ceph.status.degraded_objects
+        - sortorder: '2'
+          drawtype: DASHED_LINE
           color: FFCA28
-          calc_fnc: ALL
+          calc_fnc: MAX
           item:
             host: 'Proxmox VE by HTTP - CEPH'
             key: proxmox.cluster.ceph.status.misplaced_objects
-        - sortorder: '2'
+        - sortorder: '3'
           drawtype: DASHED_LINE
           color: 1E88E5
           yaxisside: RIGHT
