@@ -35,6 +35,8 @@ You'll need Zabbix API secret token, paste it into **secrets**.
 
 Finally, add a notification matcher as you see fit, and select the target that you just added.
 
+Note: It needs more tweaking/testing regarding when the backup is running. Feel free to colaborate.
+
 Tested in:\
 Proxmox 8.0\
 Zabbix 7.0
